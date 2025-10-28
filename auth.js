@@ -3,6 +3,7 @@ const JSONBIN_API_KEY = '$2a$10$rB6rOL9mv7G7jR9mYQStnOqoKIVzmQukSnEkpKQXfrdrV9g1
 const JSONBIN_BIN_ID = '675a5b59e41b4d34e4412345';
 
 let users = [];
+let authChecked = false; // Флаг чтобы избежать зацикливания
 
 document.addEventListener('DOMContentLoaded', function() {
     console.log('🚀 Auth script loaded');
@@ -11,7 +12,6 @@ document.addEventListener('DOMContentLoaded', function() {
     const registerForm = document.getElementById('register-form');
     const authTabs = document.getElementById('auth-tabs');
 
-    // Проверяем что формы найдены
     console.log('Login form:', loginForm);
     console.log('Register form:', registerForm);
     
@@ -25,9 +25,10 @@ document.addEventListener('DOMContentLoaded', function() {
     loginForm.addEventListener('submit', handleLogin);
     registerForm.addEventListener('submit', handleRegister);
     
-    // Загружаем пользователей
-    loadUsers();
-    checkAuthStatus();
+    // Загружаем пользователей и проверяем авторизацию
+    loadUsers().then(() => {
+        checkAuthStatus();
+    });
 });
 
 async function loadUsers() {
@@ -45,14 +46,13 @@ async function loadUsers() {
         if (response.ok) {
             const data = await response.json();
             users = data.record?.users || [];
-            console.log('✅ Users loaded:', users);
+            console.log('✅ Users loaded:', users.length);
         } else {
             console.log('❌ Response not OK, creating new database...');
             await createInitialDatabase();
         }
     } catch (error) {
         console.error('💥 Error loading users:', error);
-        // Продолжаем работу даже с ошибкой
         users = [];
     }
 }
@@ -79,8 +79,6 @@ async function createInitialDatabase() {
         if (response.ok) {
             users = [];
             console.log('✅ Database created successfully');
-        } else {
-            console.error('❌ Failed to create database');
         }
     } catch (error) {
         console.error('💥 Error creating database:', error);
@@ -88,7 +86,7 @@ async function createInitialDatabase() {
 }
 
 async function saveUsers() {
-    console.log('💾 Saving users:', users);
+    console.log('💾 Saving users:', users.length);
     
     try {
         const response = await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}`, {
@@ -104,14 +102,7 @@ async function saveUsers() {
         });
         
         console.log('📨 Save response status:', response.status);
-        
-        if (response.ok) {
-            console.log('✅ Users saved successfully');
-            return true;
-        } else {
-            console.error('❌ Save failed with status:', response.status);
-            return false;
-        }
+        return response.ok;
     } catch (error) {
         console.error('💥 Save error:', error);
         return false;
@@ -138,6 +129,7 @@ async function handleLogin(e) {
         console.log('✅ Login successful');
         localStorage.setItem('currentUser', user.username);
         localStorage.setItem('currentUserId', user.id);
+        authChecked = true;
         window.location.href = './todolist.html';
     } else {
         console.log('❌ Login failed - user not found');
@@ -154,7 +146,6 @@ async function handleRegister(e) {
 
     console.log('👤 Registration attempt:', username);
 
-    // Валидация
     if (username.length < 3) {
         alert('Логин должен содержать минимум 3 символа');
         return;
@@ -165,13 +156,11 @@ async function handleRegister(e) {
         return;
     }
 
-    // Проверка существования пользователя
     if (users.find(u => u.username === username)) {
         alert('Пользователь с таким логином уже существует');
         return;
     }
 
-    // Создаем нового пользователя
     const newUser = {
         id: Date.now().toString(),
         username: username,
@@ -181,11 +170,9 @@ async function handleRegister(e) {
 
     console.log('🆕 New user:', newUser);
     
-    // Добавляем в массив
     users.push(newUser);
-    console.log('📋 Users array now:', users);
+    console.log('📋 Users array now:', users.length);
 
-    // Сохраняем в базу
     const saved = await saveUsers();
 
     if (saved) {
@@ -196,7 +183,6 @@ async function handleRegister(e) {
         document.getElementById('login-password').value = '';
     } else {
         console.log('❌ Registration failed - save error');
-        // Удаляем пользователя из массива если сохранение не удалось
         users = users.filter(u => u.username !== username);
         alert('Ошибка при регистрации. Попробуйте еще раз.');
     }
@@ -209,7 +195,6 @@ function switchAuthTab(tab) {
     const registerForm = document.getElementById('register-form');
     const authTitle = document.getElementById('auth-title');
     
-    // Обновляем активные вкладки
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
     document.querySelector(`.tab[data-tab="${tab}"]`).classList.add('active');
 
@@ -225,11 +210,26 @@ function switchAuthTab(tab) {
 }
 
 function checkAuthStatus() {
+    if (authChecked) return; // Уже проверяли
+    
     const currentUser = localStorage.getItem('currentUser');
-    if (currentUser) {
-        console.log('🔑 User already logged in:', currentUser);
-        window.location.href = './todolist.html';
+    const currentPage = window.location.pathname;
+    
+    console.log('🔍 Auth check - user:', currentUser, 'page:', currentPage);
+    
+    if (currentUser && currentPage.includes('index.html')) {
+        console.log('🔑 Redirecting to todolist...');
+        authChecked = true;
+        setTimeout(() => {
+            window.location.href = './todolist.html';
+        }, 100);
+    } else if (!currentUser && currentPage.includes('todolist.html')) {
+        console.log('🔒 Redirecting to index...');
+        authChecked = true;
+        setTimeout(() => {
+            window.location.href = './index.html';
+        }, 100);
     } else {
-        console.log('🔒 No user logged in');
+        console.log('📍 Staying on current page');
     }
 }

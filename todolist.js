@@ -79,27 +79,34 @@ async function initApp() {
         return;
     }
 
+    // ... остальной код
+}
+
+// На это:
+async function initApp() {
+    currentUser = localStorage.getItem('currentUser');
+    currentUserId = localStorage.getItem('currentUserId');
+    
+    console.log('🔍 Todolist auth check:', { currentUser, currentUserId });
+    
+    if (!currentUser || !currentUserId) {
+        console.log('❌ No auth, redirecting to index...');
+        setTimeout(() => {
+            window.location.href = './index.html';
+        }, 100);
+        return;
+    }
+
+    console.log('✅ Auth OK, loading app...');
     currentUserSpan.textContent = currentUser;
     
-    // Запускаем часы
+    // ... остальной код без изменений
     startClock();
-    
-    // Настройка обработчиков событий
     setupEventListeners();
-    
-    // Инициализируем дату по умолчанию
     document.getElementById('task-date').value = getTodayDate();
-    
-    // Создаем или загружаем базу задач пользователя
     await setupUserTasksBin();
-    
-    // Загрузка задач
     await loadTasks();
-    
-    // Запуск таймера
     startTimer();
-    
-    // Инициализация статистики
     initStats();
 }
 
