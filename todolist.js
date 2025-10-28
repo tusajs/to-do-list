@@ -1,5 +1,9 @@
-// Основные переменные приложения
+// JSONBin.io конфигурация
+const JSONBIN_API_KEY = '$2a$10$rB6rOL9mv7G7jR9mYQStnOqoKIVzmQukSnEkpKQXfrdrV9g1UYNie';
+
 let currentUser = null;
+let currentUserId = null;
+let userTasksBinId = null;
 let tasks = [];
 let currentFilter = 'all';
 let updateInterval = null;
@@ -26,12 +30,12 @@ const selectAllBtn = document.getElementById('select-all-btn');
 const deleteAllBtn = document.getElementById('delete-all-btn');
 const resetStatsBtn = document.getElementById('reset-stats-btn');
 
-// Функции для обновления даты и времени
+// Функции для времени
 function updateCurrentDateTime() {
     const now = new Date();
-    
-    // Форматируем дату
     const dateElement = document.getElementById('current-date');
+    const timeElement = document.getElementById('current-time');
+    
     if (dateElement) {
         dateElement.textContent = now.toLocaleDateString('ru-RU', {
             weekday: 'long',
@@ -41,8 +45,6 @@ function updateCurrentDateTime() {
         });
     }
     
-    // Форматируем время
-    const timeElement = document.getElementById('current-time');
     if (timeElement) {
         timeElement.textContent = now.toLocaleTimeString('ru-RU', {
             hour: '2-digit',
@@ -52,44 +54,28 @@ function updateCurrentDateTime() {
     }
 }
 
-// Функция для запуска часов
 function startClock() {
-    // Обновляем сразу при запуске
     updateCurrentDateTime();
-    
-    // Обновляем каждую секунду
     setInterval(updateCurrentDateTime, 1000);
 }
 
-// Функция для получения корректной сегодняшней даты
 function getTodayDate() {
     const now = new Date();
-    
-    // Получаем дату в локальном времени
     const year = now.getFullYear();
     const month = String(now.getMonth() + 1).padStart(2, '0');
     const day = String(now.getDate()).padStart(2, '0');
-    
     return `${year}-${month}-${day}`;
-}
-
-function getCurrentDate() {
-    const now = new Date();
-    return {
-        date: now.toLocaleDateString('ru-RU'),
-        time: now.toLocaleTimeString('ru-RU'),
-        timestamp: now.getTime()
-    };
 }
 
 // Инициализация приложения
 document.addEventListener('DOMContentLoaded', initApp);
 
-function initApp() {
-    // Проверяем авторизацию
+async function initApp() {
     currentUser = localStorage.getItem('currentUser');
-    if (!currentUser) {
-        window.location.href = 'index.html';
+    currentUserId = localStorage.getItem('currentUserId');
+    
+    if (!currentUser || !currentUserId) {
+        window.location.href = './index.html';
         return;
     }
 
@@ -101,38 +87,109 @@ function initApp() {
     // Настройка обработчиков событий
     setupEventListeners();
     
-    // Инициализируем дату по умолчанию КОРРЕКТНО
+    // Инициализируем дату по умолчанию
     document.getElementById('task-date').value = getTodayDate();
     
-    console.log('Инициализирована дата по умолчанию:', {
-        today: getTodayDate(),
-        localDate: new Date().toLocaleDateString('ru-RU'),
-        UTC: new Date().toISOString()
-    });
+    // Создаем или загружаем базу задач пользователя
+    await setupUserTasksBin();
     
     // Загрузка задач
-    loadTasks();
+    await loadTasks();
     
-    // Запуск таймера для обновления времени
+    // Запуск таймера
     startTimer();
     
     // Инициализация статистики
     initStats();
+}
+
+async function setupUserTasksBin() {
+    // Получаем информацию о пользователе чтобы найти его tasksBinId
+    const usersResponse = await fetch(`https://api.jsonbin.io/v3/b/675a5b59e41b4d34e4412345/latest`, {
+        headers: {
+            'X-Master-Key': JSONBIN_API_KEY
+        }
+    });
     
-    console.log('Приложение инициализировано. Текущая дата:', getCurrentDate());
+    if (usersResponse.ok) {
+        const data = await usersResponse.json();
+        const users = data.record?.users || [];
+        const currentUserData = users.find(u => u.id === currentUserId);
+        
+        if (currentUserData && currentUserData.tasksBinId) {
+            userTasksBinId = currentUserData.tasksBinId;
+        } else {
+            // Создаем новую базу задач для пользователя
+            userTasksBinId = await createUserTasksBin();
+            
+            // Обновляем пользователя с новым tasksBinId
+            await updateUserWithTasksBinId(userTasksBinId);
+        }
+    }
+}
+
+async function createUserTasksBin() {
+    const initialTasksData = {
+        tasks: [],
+        userId: currentUserId,
+        username: currentUser,
+        created: new Date().toISOString()
+    };
+    
+    try {
+        const response = await fetch('https://api.jsonbin.io/v3/b', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Master-Key': JSONBIN_API_KEY,
+                'X-Bin-Name': `Tasks - ${currentUser}`
+            },
+            body: JSON.stringify(initialTasksData)
+        });
+        
+        const data = await response.json();
+        return data.metadata.id;
+    } catch (error) {
+        console.error('Ошибка создания базы задач:', error);
+        throw error;
+    }
+}
+
+async function updateUserWithTasksBinId(tasksBinId) {
+    const usersResponse = await fetch(`https://api.jsonbin.io/v3/b/675a5b59e41b4d34e4412345/latest`, {
+        headers: {
+            'X-Master-Key': JSONBIN_API_KEY
+        }
+    });
+    
+    if (usersResponse.ok) {
+        const data = await usersResponse.json();
+        const users = data.record.users || [];
+        
+        const userIndex = users.findIndex(u => u.id === currentUserId);
+        if (userIndex !== -1) {
+            users[userIndex].tasksBinId = tasksBinId;
+            
+            await fetch(`https://api.jsonbin.io/v3/b/675a5b59e41b4d34e4412345`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Master-Key': JSONBIN_API_KEY
+                },
+                body: JSON.stringify({
+                    users: users,
+                    metadata: data.record.metadata
+                })
+            });
+        }
+    }
 }
 
 function setupEventListeners() {
-    // Выход из системы
     logoutBtn.addEventListener('click', handleLogout);
-
-    // Переключение типа срока выполнения
     taskDeadlineType.addEventListener('change', toggleDeadlineInput);
-    
-    // Добавление новой задачи
     addTaskForm.addEventListener('submit', addTask);
 
-    // Фильтрация задач
     filterBtns.forEach(btn => {
         btn.addEventListener('click', () => {
             const filter = btn.dataset.filter;
@@ -140,13 +197,11 @@ function setupEventListeners() {
         });
     });
 
-    // Редактирование задачи
     editTaskForm.addEventListener('submit', saveEditedTask);
     cancelEditBtn.addEventListener('click', () => {
         editModal.classList.add('hidden');
     });
 
-    // Закрытие модальных окон
     editModal.addEventListener('click', (e) => {
         if (e.target === editModal) {
             editModal.classList.add('hidden');
@@ -163,7 +218,6 @@ function setupEventListeners() {
         confirmModal.classList.add('hidden');
     });
 
-    // Управление задачами
     selectAllBtn.addEventListener('click', handleSelectAll);
     deleteAllBtn.addEventListener('click', handleDeleteAll);
     resetStatsBtn.addEventListener('click', handleResetStats);
@@ -171,7 +225,8 @@ function setupEventListeners() {
 
 function handleLogout() {
     localStorage.removeItem('currentUser');
-    window.location.href = 'index.html';
+    localStorage.removeItem('currentUserId');
+    window.location.href = './index.html';
 }
 
 function toggleDeadlineInput() {
@@ -180,45 +235,30 @@ function toggleDeadlineInput() {
     if (type === 'days') {
         daysInputContainer.classList.remove('hidden');
         dateInputContainer.classList.add('hidden');
-        
         document.getElementById('task-days').value = 1;
     } else {
         daysInputContainer.classList.add('hidden');
         dateInputContainer.classList.remove('hidden');
-        
-        // Устанавливаем минимальную дату - сегодня
-        const today = getTodayDate();
-        document.getElementById('task-date').min = today;
-        
-        // Устанавливаем дату по умолчанию - СЕГОДНЯ (корректно)
-        document.getElementById('task-date').value = today;
-        
-        console.log('Установлена дата по умолчанию:', {
-            today: today,
-            localDate: new Date().toLocaleDateString('ru-RU')
-        });
+        document.getElementById('task-date').value = getTodayDate();
     }
 }
 
-// Функция для получения конца дня
 function getEndOfDay(date) {
     const endOfDay = new Date(date);
     endOfDay.setHours(23, 59, 59, 999);
     return endOfDay;
 }
 
-function addTask(e) {
+async function addTask(e) {
     e.preventDefault();
     
-    const title = document.getElementById('task-title').value;
+    const title = document.getElementById('task-title').value.trim();
     const deadlineType = taskDeadlineType.value;
     
-    console.log('Создание задачи:', {
-        title,
-        deadlineType,
-        currentLocalDate: new Date().toLocaleDateString('ru-RU'),
-        currentUTC: new Date().toISOString()
-    });
+    if (!title) {
+        alert('Введите название задачи');
+        return;
+    }
     
     let deadline;
     if (deadlineType === 'days') {
@@ -226,72 +266,74 @@ function addTask(e) {
         deadline = new Date();
         deadline.setDate(deadline.getDate() + days);
         deadline = getEndOfDay(deadline);
-        
-        console.log('Расчет по дням:', {
-            days,
-            calculatedDate: deadline.toLocaleDateString('ru-RU'),
-            calculatedUTC: deadline.toISOString()
-        });
     } else {
         const dateValue = document.getElementById('task-date').value;
-        
-        // Создаем дату из значения input (уже в правильном формате)
-        deadline = new Date(dateValue + 'T23:59:59.999'); // Прямо устанавливаем конец дня
-        
-        console.log('Расчет по дате:', {
-            selectedDate: dateValue,
-            calculatedDate: deadline.toLocaleDateString('ru-RU'),
-            calculatedUTC: deadline.toISOString()
-        });
+        deadline = new Date(dateValue + 'T23:59:59.999');
     }
     
     const task = {
         id: Date.now().toString(),
-        title,
+        title: title,
         deadline: deadline.getTime(),
         completed: false,
         createdAt: Date.now(),
-        totalTime: deadline.getTime() - Date.now()
+        totalTime: deadline.getTime() - Date.now(),
+        userId: currentUserId
     };
     
-    console.log('Созданная задача:', {
-        deadlineLocal: new Date(task.deadline).toLocaleString('ru-RU'),
-        deadlineUTC: new Date(task.deadline).toISOString()
-    });
-    
-    tasks.push(task);
-    saveTasks();
-    renderTasks();
-    
-    // Сбрасываем форму
-    addTaskForm.reset();
-    document.getElementById('task-title').value = '';
-    document.getElementById('task-days').value = 1;
-    
-    // Переустанавливаем сегодняшнюю дату по умолчанию
-    document.getElementById('task-date').value = getTodayDate();
-}
-
-function deleteTask(id) {
-    if (confirm('Вы уверены, что хотите удалить эту задачу?')) {
-        tasks = tasks.filter(task => task.id !== id);
-        saveTasks();
-        renderTasks();
+    try {
+        tasks.push(task);
+        await saveTasks();
+        
+        // Сбрасываем форму
+        addTaskForm.reset();
+        document.getElementById('task-title').value = '';
+        document.getElementById('task-days').value = 1;
+        document.getElementById('task-date').value = getTodayDate();
+        
+    } catch (error) {
+        console.error('Ошибка добавления задачи:', error);
+        alert('Ошибка при добавлении задачи');
+        tasks.pop(); // Откатываем изменения
     }
 }
 
-function toggleTaskCompletion(id) {
-    const task = tasks.find(task => task.id === id);
-    if (task) {
+async function deleteTask(id) {
+    if (confirm('Вы уверены, что хотите удалить эту задачу?')) {
+        try {
+            tasks = tasks.filter(task => task.id !== id);
+            await saveTasks();
+        } catch (error) {
+            console.error('Ошибка удаления:', error);
+            alert('Ошибка при удалении задачи');
+        }
+    }
+}
+
+async function toggleTaskCompletion(id) {
+    const taskIndex = tasks.findIndex(task => task.id === id);
+    if (taskIndex !== -1) {
+        const task = tasks[taskIndex];
         task.completed = !task.completed;
+        
         if (task.completed && !task.completedAt) {
             task.completedAt = Date.now();
         } else if (!task.completed) {
             task.completedAt = null;
         }
-        saveTasks();
-        renderTasks();
-        updateStats(document.querySelector('.stats-tab.active').dataset.period);
+        
+        try {
+            await saveTasks();
+            updateStats(document.querySelector('.stats-tab.active').dataset.period);
+        } catch (error) {
+            console.error('Ошибка обновления:', error);
+            alert('Ошибка при обновлении задачи');
+            // Откатываем изменения
+            task.completed = !task.completed;
+            if (task.completedAt) {
+                task.completedAt = task.completed ? Date.now() : null;
+            }
+        }
     }
 }
 
@@ -302,11 +344,8 @@ function editTask(id) {
         document.getElementById('edit-task-title').value = task.title;
         
         const deadline = new Date(task.deadline);
-        
-        // Всегда показываем дату как приоритет
         document.getElementById('edit-task-deadline-type').value = 'date';
         
-        // Устанавливаем дату из задачи в правильном формате
         const year = deadline.getFullYear();
         const month = String(deadline.getMonth() + 1).padStart(2, '0');
         const day = String(deadline.getDate()).padStart(2, '0');
@@ -319,12 +358,17 @@ function editTask(id) {
     }
 }
 
-function saveEditedTask(e) {
+async function saveEditedTask(e) {
     e.preventDefault();
     
     const id = document.getElementById('edit-task-id').value;
-    const title = document.getElementById('edit-task-title').value;
+    const title = document.getElementById('edit-task-title').value.trim();
     const deadlineType = document.getElementById('edit-task-deadline-type').value;
+    
+    if (!title) {
+        alert('Введите название задачи');
+        return;
+    }
     
     let deadline;
     if (deadlineType === 'days') {
@@ -334,31 +378,33 @@ function saveEditedTask(e) {
         deadline = getEndOfDay(deadline);
     } else {
         const dateValue = document.getElementById('edit-task-date').value;
-        // Прямо устанавливаем конец выбранного дня
         deadline = new Date(dateValue + 'T23:59:59.999');
     }
     
-    const task = tasks.find(task => task.id === id);
-    if (task) {
-        task.title = title;
-        task.deadline = deadline.getTime();
-        task.totalTime = deadline.getTime() - task.createdAt;
-        saveTasks();
-        renderTasks();
-        editModal.classList.add('hidden');
+    const taskIndex = tasks.findIndex(task => task.id === id);
+    if (taskIndex !== -1) {
+        tasks[taskIndex].title = title;
+        tasks[taskIndex].deadline = deadline.getTime();
+        tasks[taskIndex].totalTime = deadline.getTime() - tasks[taskIndex].createdAt;
+        
+        try {
+            await saveTasks();
+            editModal.classList.add('hidden');
+        } catch (error) {
+            console.error('Ошибка сохранения:', error);
+            alert('Ошибка при сохранении задачи');
+        }
     }
 }
 
-// Функции для управления задачами
+// Функции управления задачами
 function handleSelectAll() {
     const allSelected = selectedTasks.size === tasks.length;
     
     if (allSelected) {
-        // Если все уже выделены - снимаем выделение
         selectedTasks.clear();
         selectAllBtn.textContent = 'Выделить все';
     } else {
-        // Выделяем все задачи
         selectedTasks.clear();
         tasks.forEach(task => selectedTasks.add(task.id));
         selectAllBtn.textContent = 'Снять выделение';
@@ -367,57 +413,48 @@ function handleSelectAll() {
     renderTasks();
 }
 
-function handleDeleteAll() {
+async function handleDeleteAll() {
     if (tasks.length === 0) {
         alert('Нет задач для удаления');
         return;
     }
 
     if (selectedTasks.size > 0) {
-        // Удаляем только выделенные задачи
         showConfirmModal(
             'Удалить выделенные задачи',
             `Вы уверены, что хотите удалить ${selectedTasks.size} выделенных задач?`,
-            () => {
+            async () => {
                 tasks = tasks.filter(task => !selectedTasks.has(task.id));
                 selectedTasks.clear();
-                saveTasks();
-                renderTasks();
+                await saveTasks();
                 selectAllBtn.textContent = 'Выделить все';
             }
         );
     } else {
-        // Удаляем все задачи
         showConfirmModal(
             'Удалить все задачи',
-            'Вы уверены, что хотите удалить ВСЕ задачи? Это действие нельзя отменить.',
-            () => {
+            'Вы уверены, что хотите удалить ВСЕ задачи?',
+            async () => {
                 tasks = [];
                 selectedTasks.clear();
-                saveTasks();
-                renderTasks();
+                await saveTasks();
                 selectAllBtn.textContent = 'Выделить все';
             }
         );
     }
 }
 
-function handleResetStats() {
+async function handleResetStats() {
     showConfirmModal(
         'Сбросить статистику',
-        'Вы уверены, что хотите сбросить всю статистику? Это действие нельзя отменить.',
-        () => {
-            // Удаляем все задачи текущего пользователя
+        'Вы уверены, что хотите удалить ВСЕ ваши задачи?',
+        async () => {
             tasks = [];
             selectedTasks.clear();
-            saveTasks();
-            renderTasks();
+            await saveTasks();
             selectAllBtn.textContent = 'Выделить все';
-            
-            // Обновляем статистику
             updateStats(document.querySelector('.stats-tab.active').dataset.period);
-            
-            alert('Статистика успешно сброшена!');
+            alert('Все задачи удалены!');
         }
     );
 }
@@ -427,11 +464,9 @@ function showConfirmModal(title, message, onConfirm) {
     confirmMessage.textContent = message;
     confirmModal.classList.remove('hidden');
     
-    // Удаляем старые обработчики
     confirmYes.replaceWith(confirmYes.cloneNode(true));
     const newConfirmYes = document.getElementById('confirm-yes');
     
-    // Добавляем новый обработчик
     newConfirmYes.addEventListener('click', () => {
         confirmModal.classList.add('hidden');
         onConfirm();
@@ -441,7 +476,6 @@ function showConfirmModal(title, message, onConfirm) {
 function setFilter(filter) {
     currentFilter = filter;
     
-    // Обновляем активную кнопку фильтра
     filterBtns.forEach(btn => {
         if (btn.dataset.filter === filter) {
             btn.classList.add('active');
@@ -453,8 +487,59 @@ function setFilter(filter) {
     renderTasks();
 }
 
+// Загрузка задач из JSONBin
+async function loadTasks() {
+    if (!userTasksBinId) return;
+    
+    try {
+        const response = await fetch(`https://api.jsonbin.io/v3/b/${userTasksBinId}/latest`, {
+            headers: {
+                'X-Master-Key': JSONBIN_API_KEY
+            }
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            tasks = data.record?.tasks || [];
+            renderTasks();
+        }
+    } catch (error) {
+        console.error('Ошибка загрузки задач:', error);
+    }
+}
+
+// Сохранение задач в JSONBin
+async function saveTasks() {
+    if (!userTasksBinId) return;
+    
+    try {
+        const response = await fetch(`https://api.jsonbin.io/v3/b/${userTasksBinId}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Master-Key': JSONBIN_API_KEY
+            },
+            body: JSON.stringify({
+                tasks: tasks,
+                userId: currentUserId,
+                username: currentUser,
+                updated: new Date().toISOString(),
+                totalTasks: tasks.length
+            })
+        });
+        
+        if (response.ok) {
+            renderTasks();
+        } else {
+            throw new Error('Ошибка сохранения');
+        }
+    } catch (error) {
+        console.error('Ошибка сохранения задач:', error);
+        throw error;
+    }
+}
+
 function renderTasks() {
-    // Фильтруем задачи в зависимости от текущего фильтра
     let filteredTasks = tasks;
     
     if (currentFilter === 'active') {
@@ -463,7 +548,6 @@ function renderTasks() {
         filteredTasks = tasks.filter(task => task.completed);
     }
     
-    // Сортируем задачи: сначала невыполненные, затем выполненные
     filteredTasks.sort((a, b) => {
         if (a.completed !== b.completed) {
             return a.completed ? 1 : -1;
@@ -471,7 +555,6 @@ function renderTasks() {
         return a.deadline - b.deadline;
     });
     
-    // Очищаем список задач
     tasksList.innerHTML = '';
     
     if (filteredTasks.length === 0) {
@@ -479,13 +562,11 @@ function renderTasks() {
         return;
     }
     
-    // Добавляем задачи в список
     filteredTasks.forEach(task => {
         const taskElement = createTaskElement(task);
         tasksList.appendChild(taskElement);
     });
     
-    // Обновляем текст кнопки выделения
     if (selectedTasks.size === tasks.length && tasks.length > 0) {
         selectAllBtn.textContent = 'Снять выделение';
     } else {
@@ -498,7 +579,6 @@ function getRemainingTime(deadline) {
     const now = new Date();
     const target = new Date(deadline);
     
-    // Разница в миллисекундах
     const diff = target - now;
     
     if (diff <= 0) {
@@ -530,18 +610,16 @@ function getProgressInfo(task, remainingTime) {
         textColor = '#fff';
         textBg = 'var(--danger)';
     } else {
-        // Рассчитываем цвет на основе процента оставшегося времени
         const timePercentage = (remainingTime.totalMs / totalTime) * 100;
         
         if (timePercentage > 50) {
-            color = 'var(--success)'; // Зеленый
+            color = 'var(--success)';
         } else if (timePercentage > 20) {
-            color = 'var(--warning)'; // Желтый
+            color = 'var(--warning)';
         } else {
-            color = 'var(--danger)'; // Красный
+            color = 'var(--danger)';
         }
         
-        // Текст с оставшимся временем
         if (remainingTime.days > 0) {
             text = `${remainingTime.days}${getDayText(remainingTime.days)} ${remainingTime.hours}ч`;
         } else if (remainingTime.hours > 0) {
@@ -572,7 +650,6 @@ function createTaskElement(task) {
     const remainingTime = getRemainingTime(task.deadline);
     const progressInfo = getProgressInfo(task, remainingTime);
     
-    // Форматируем дату для отображения
     const formattedDate = new Date(task.deadline).toLocaleDateString('ru-RU', {
         day: 'numeric',
         month: 'long',
@@ -609,15 +686,9 @@ function createTaskElement(task) {
             <div class="progress-bar">
                 <div class="progress-fill" style="width: ${progressInfo.width}%; background-color: ${progressInfo.color};"></div>
             </div>
-            <div class="debug-info">
-                Создано: ${new Date(task.createdAt).toLocaleString('ru-RU')} | 
-                Дедлайн: ${new Date(task.deadline).toLocaleString('ru-RU')} |
-                Сейчас: ${new Date().toLocaleString('ru-RU')}
-            </div>
         </div>
     `;
     
-    // Добавляем обработчики событий для кнопок
     const selectBtn = taskElement.querySelector('.select-btn');
     const editBtn = taskElement.querySelector('.edit-btn');
     const completeBtn = taskElement.querySelector('.complete-btn');
@@ -650,14 +721,12 @@ function updateTaskTimes() {
             const remainingTime = getRemainingTime(task.deadline);
             const progressInfo = getProgressInfo(task, remainingTime);
             
-            // Обновляем прогресс-бар
             const progressFill = taskElement.querySelector('.progress-fill');
             if (progressFill) {
                 progressFill.style.width = `${progressInfo.width}%`;
                 progressFill.style.backgroundColor = progressInfo.color;
             }
             
-            // Обновляем текст времени
             const deadlineTime = taskElement.querySelector('.deadline-time');
             if (deadlineTime) {
                 deadlineTime.textContent = progressInfo.text;
@@ -669,28 +738,9 @@ function updateTaskTimes() {
 }
 
 function startTimer() {
-    // Обновляем время каждую минуту
     updateInterval = setInterval(() => {
         updateTaskTimes();
-    }, 60000); // 1 минута
-}
-
-function loadTasks() {
-    const savedTasks = localStorage.getItem(`tasks_${currentUser}`);
-    tasks = savedTasks ? JSON.parse(savedTasks) : [];
-    
-    // Обновляем общее время для старых задач
-    tasks.forEach(task => {
-        if (!task.totalTime) {
-            task.totalTime = task.deadline - task.createdAt;
-        }
-    });
-    
-    renderTasks();
-}
-
-function saveTasks() {
-    localStorage.setItem(`tasks_${currentUser}`, JSON.stringify(tasks));
+    }, 60000);
 }
 
 // Функции для статистики
@@ -700,17 +750,14 @@ function calculateStats(period = 'week') {
     
     switch(period) {
         case 'week':
-            // Начало недели (понедельник)
             startDate = new Date(now);
             startDate.setDate(now.getDate() - now.getDay() + (now.getDay() === 0 ? -6 : 1));
             startDate.setHours(0, 0, 0, 0);
             break;
         case 'month':
-            // Начало месяца
             startDate = new Date(now.getFullYear(), now.getMonth(), 1);
             break;
         case 'all':
-            // Все время (очень старая дата)
             startDate = new Date(0);
             break;
     }
@@ -722,7 +769,6 @@ function calculateStats(period = 'week') {
     const completedTasks = periodTasks.filter(task => task.completed);
     const activeTasks = periodTasks.filter(task => !task.completed);
     
-    // Расчет времени выполнения
     let totalEarlyTime = 0;
     let earlyCompletions = 0;
     let onTimeCompletions = 0;
@@ -734,14 +780,11 @@ function calculateStats(period = 'week') {
         const timeDiff = deadline - completionTime;
         
         if (timeDiff > 0) {
-            // Задача завершена досрочно
             totalEarlyTime += timeDiff;
             earlyCompletions++;
         } else if (timeDiff === 0) {
-            // Задача завершена вовремя
             onTimeCompletions++;
         } else {
-            // Задача просрочена
             overdueCompletions++;
         }
     });
@@ -765,19 +808,16 @@ function calculateStats(period = 'week') {
 function updateStats(period = 'week') {
     const stats = calculateStats(period);
     
-    // Обновляем основные показатели
     document.getElementById('total-tasks').textContent = stats.totalTasks;
     document.getElementById('completed-tasks').textContent = stats.completedTasks;
     document.getElementById('completion-rate').textContent = `${stats.completionRate}%`;
     document.getElementById('avg-early').textContent = `${stats.avgEarlyHours}ч`;
     
-    // Обновляем детальную статистику
     document.getElementById('on-time').textContent = stats.onTimeCompletions;
     document.getElementById('early').textContent = stats.earlyCompletions;
     document.getElementById('overdue').textContent = stats.overdueCompletions;
     document.getElementById('active').textContent = stats.activeTasks;
     
-    // Обновляем сообщение о производительности
     updatePerformanceMessage(stats);
 }
 
@@ -797,7 +837,6 @@ function updatePerformanceMessage(stats) {
         message = 'Вам стоит пересмотреть подход к планированию задач.';
     }
     
-    // Добавляем информацию о времени, если есть данные
     if (stats.avgEarlyHours > 0) {
         message += ` Вы в среднем завершаете задачи на ${stats.avgEarlyHours} часов раньше срока!`;
     }
@@ -809,27 +848,21 @@ function updatePerformanceMessage(stats) {
     messageElement.textContent = message;
 }
 
-// Функция инициализации статистики
 function initStats() {
-    // Обработчики для вкладок статистики
     document.querySelectorAll('.stats-tab').forEach(tab => {
         tab.addEventListener('click', () => {
             const period = tab.dataset.period;
             
-            // Обновляем активные вкладки
             document.querySelectorAll('.stats-tab').forEach(t => t.classList.remove('active'));
             tab.classList.add('active');
             
-            // Обновляем статистику
             updateStats(period);
         });
     });
     
-    // Первоначальное обновление статистики
     updateStats('week');
 }
 
-// Вспомогательная функция для правильного склонения
 function getDayText(days) {
     if (days % 10 === 1 && days % 100 !== 11) {
         return ' день';
@@ -840,27 +873,6 @@ function getDayText(days) {
     }
 }
 
-// Функция для отладки дат
-function debugDates() {
-    console.log('=== ОТЛАДКА ДАТ ===');
-    console.log('Локальная дата:', new Date().toLocaleDateString('ru-RU'));
-    console.log('UTC дата:', new Date().toISOString());
-    console.log('Input value:', document.getElementById('task-date').value);
-    console.log('Сегодня через getTodayDate():', getTodayDate());
-    
-    tasks.forEach((task, index) => {
-        const deadline = new Date(task.deadline);
-        console.log(`Задача ${index + 1}:`, {
-            title: task.title,
-            created: new Date(task.createdAt).toLocaleString('ru-RU'),
-            deadline: deadline.toLocaleString('ru-RU'),
-            deadlineUTC: deadline.toISOString()
-        });
-    });
-    console.log('==================');
-}
-
-// Очистка таймера при закрытии страницы
 window.addEventListener('beforeunload', () => {
     if (updateInterval) {
         clearInterval(updateInterval);

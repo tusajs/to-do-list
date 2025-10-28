@@ -1,0 +1,2 @@
+jsonbin.io
+app.netlify.com
