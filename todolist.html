@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Мой To-Do List</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="app">
+        <!-- Красивое отображение даты и времени -->
+        <div class="current-time-header">
+            <div class="current-time-container">
+                <div class="current-date" id="current-date">
+                    <!-- Дата будет здесь -->
+                </div>
+                <div class="current-time" id="current-time">
+                    <!-- Время будет здесь -->
+                </div>
+            </div>
+        </div>
+
+        <header class="header">
+            <h1>Мой To-Do List</h1>
+            <div class="user-info">
+                <span id="current-user"></span>
+                <button id="logout-btn" class="btn btn-secondary">Выйти</button>
+            </div>
+        </header>
+
+        <main class="main-content">
+            <div class="add-task-container">
+                <h2>Добавить задачу</h2>
+                <form id="add-task-form">
+                    <div class="form-group">
+                        <label for="task-title">Задача</label>
+                        <input type="text" id="task-title" placeholder="Что нужно сделать?" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="task-deadline-type">Срок выполнения</label>
+                        <select id="task-deadline-type">
+                            <option value="date">Конкретная дата</option>
+                            <option value="days">Количество дней</option>
+                        </select>
+                    </div>
+                    <div class="form-group" id="date-input-container">
+                        <label for="task-date">Дата выполнения</label>
+                        <input type="date" id="task-date">
+                        <small style="color: #666; font-size: 12px; display: block; margin-top: 5px;">При выборе сегодняшней даты задача должна быть выполнена до конца дня (23:59)</small>
+                    </div>
+                    <div class="form-group hidden" id="days-input-container">
+                        <label for="task-days">Дней на выполнение</label>
+                        <input type="number" id="task-days" min="1" value="1">
+                    </div>
+                    <button type="submit" class="btn btn-primary">Добавить задачу</button>
+                </form>
+            </div>
+
+            <div class="tasks-container">
+                <div class="tasks-header">
+                    <h2>Мои задачи</h2>
+                    <div class="tasks-controls">
+                        <button id="select-all-btn" class="btn btn-outline">Выделить все</button>
+                        <button id="delete-all-btn" class="btn btn-danger">Удалить все</button>
+                    </div>
+                </div>
+                <div class="tasks-filter">
+                    <button class="filter-btn active" data-filter="all">Все</button>
+                    <button class="filter-btn" data-filter="active">Активные</button>
+                    <button class="filter-btn" data-filter="completed">Выполненные</button>
+                </div>
+                <div id="tasks-list" class="tasks-list">
+                    <!-- Задачи будут добавляться сюда динамически -->
+                </div>
+            </div>
+
+            <!-- Блок статистики -->
+            <div class="stats-container">
+                <div class="stats-header">
+                    <h2>Статистика</h2>
+                    <button id="reset-stats-btn" class="btn btn-danger">Сбросить статистику</button>
+                </div>
+                
+                <div class="stats-tabs">
+                    <button class="stats-tab active" data-period="week">Неделя</button>
+                    <button class="stats-tab" data-period="month">Месяц</button>
+                    <button class="stats-tab" data-period="all">Все время</button>
+                </div>
+                
+                <div class="stats-content">
+                    <div class="stats-overview">
+                        <div class="stat-card">
+                            <h3>Всего задач</h3>
+                            <div class="stat-value" id="total-tasks">0</div>
+                        </div>
+                        <div class="stat-card">
+                            <h3>Выполнено</h3>
+                            <div class="stat-value" id="completed-tasks">0</div>
+                        </div>
+                        <div class="stat-card">
+                            <h3>Процент выполнения</h3>
+                            <div class="stat-value" id="completion-rate">0%</div>
+                        </div>
+                        <div class="stat-card">
+                            <h3>Среднее опережение</h3>
+                            <div class="stat-value" id="avg-early">0ч</div>
+                        </div>
+                    </div>
+                    
+                    <div class="stats-message">
+                        <p id="performance-message">Начните добавлять задачи для отслеживания статистики</p>
+                    </div>
+                    
+                    <div class="stats-details">
+                        <h4>Детальная статистика</h4>
+                        <div class="stats-grid">
+                            <div class="stat-detail">
+                                <span>Завершено вовремя:</span>
+                                <span id="on-time">0</span>
+                            </div>
+                            <div class="stat-detail">
+                                <span>Завершено досрочно:</span>
+                                <span id="early">0</span>
+                            </div>
+                            <div class="stat-detail">
+                                <span>Просрочено:</span>
+                                <span id="overdue">0</span>
+                            </div>
+                            <div class="stat-detail">
+                                <span>Активные задачи:</span>
+                                <span id="active">0</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Модальное окно для подтверждения удаления -->
+    <div id="confirm-modal" class="modal hidden">
+        <div class="modal-content">
+            <h2 id="confirm-title">Подтверждение</h2>
+            <p id="confirm-message">Вы уверены, что хотите выполнить это действие?</p>
+            <div class="modal-actions">
+                <button id="confirm-yes" class="btn btn-danger">Да</button>
+                <button id="confirm-no" class="btn btn-secondary">Нет</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно для редактирования задачи -->
+    <div id="edit-modal" class="modal hidden">
+        <div class="modal-content">
+            <h2>Редактировать задачу</h2>
+            <form id="edit-task-form">
+                <input type="hidden" id="edit-task-id">
+                <div class="form-group">
+                    <label for="edit-task-title">Задача</label>
+                    <input type="text" id="edit-task-title" required>
+                </div>
+                <div class="form-group">
+                    <label for="edit-task-deadline-type">Срок выполнения</label>
+                    <select id="edit-task-deadline-type">
+                        <option value="date">Конкретная дата</option>
+                        <option value="days">Количество дней</option>
+                    </select>
+                </div>
+                <div class="form-group" id="edit-date-input-container">
+                    <label for="edit-task-date">Дата выполнения</label>
+                    <input type="date" id="edit-task-date">
+                </div>
+                <div class="form-group hidden" id="edit-days-input-container">
+                    <label for="edit-task-days">Дней на выполнение</label>
+                    <input type="number" id="edit-task-days" min="1" value="1">
+                </div>
+                <div class="modal-actions">
+                    <button type="submit" class="btn btn-primary">Сохранить</button>
+                    <button type="button" id="cancel-edit" class="btn btn-secondary">Отмена</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="todolist.js"></script>
+</body>
+</html>
