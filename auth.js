@@ -3,7 +3,6 @@ const JSONBIN_API_KEY = '$2a$10$rB6rOL9mv7G7jR9mYQStnOqoKIVzmQukSnEkpKQXfrdrV9g1
 const JSONBIN_BIN_ID = '675a5b59e41b4d34e4412345';
 
 let users = [];
-let authChecked = false; // Флаг чтобы избежать зацикливания
 
 document.addEventListener('DOMContentLoaded', function() {
     console.log('🚀 Auth script loaded');
@@ -12,9 +11,6 @@ document.addEventListener('DOMContentLoaded', function() {
     const registerForm = document.getElementById('register-form');
     const authTabs = document.getElementById('auth-tabs');
 
-    console.log('Login form:', loginForm);
-    console.log('Register form:', registerForm);
-    
     authTabs.addEventListener('click', (e) => {
         if (e.target.classList.contains('tab')) {
             const tab = e.target.dataset.tab;
@@ -25,35 +21,42 @@ document.addEventListener('DOMContentLoaded', function() {
     loginForm.addEventListener('submit', handleLogin);
     registerForm.addEventListener('submit', handleRegister);
     
-    // Загружаем пользователей и проверяем авторизацию
-    loadUsers().then(() => {
-        checkAuthStatus();
-    });
+    // Тестируем подключение к JSONBin
+    testJSONBinConnection();
+    checkAuthStatus();
 });
 
-async function loadUsers() {
+async function testJSONBinConnection() {
+    console.log('🧪 Testing JSONBin connection...');
+    
     try {
-        console.log('📡 Loading users from JSONBin...');
         const response = await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}/latest`, {
+            method: 'GET',
             headers: {
                 'X-Master-Key': JSONBIN_API_KEY,
                 'Content-Type': 'application/json'
             }
         });
         
-        console.log('📊 Response status:', response.status);
+        console.log('📡 Response status:', response.status);
+        console.log('📡 Response headers:', response.headers);
         
         if (response.ok) {
             const data = await response.json();
+            console.log('✅ JSONBin connection successful');
+            console.log('📊 Existing data:', data);
             users = data.record?.users || [];
-            console.log('✅ Users loaded:', users.length);
         } else {
-            console.log('❌ Response not OK, creating new database...');
+            console.log('❌ JSONBin response not OK, status:', response.status);
+            const errorText = await response.text();
+            console.log('❌ Error details:', errorText);
+            
+            // Пробуем создать базу
             await createInitialDatabase();
         }
     } catch (error) {
-        console.error('💥 Error loading users:', error);
-        users = [];
+        console.error('💥 JSONBin connection failed:', error);
+        alert('Ошибка подключения к облачной базе. Проверь интернет соединение.');
     }
 }
 
@@ -74,11 +77,15 @@ async function createInitialDatabase() {
             body: JSON.stringify(initialData)
         });
         
-        console.log('🔄 Create database response:', response.status);
+        console.log('🔄 Create response status:', response.status);
         
         if (response.ok) {
             users = [];
             console.log('✅ Database created successfully');
+        } else {
+            console.error('❌ Failed to create database, status:', response.status);
+            const errorText = await response.text();
+            console.error('❌ Error details:', errorText);
         }
     } catch (error) {
         console.error('💥 Error creating database:', error);
@@ -86,7 +93,7 @@ async function createInitialDatabase() {
 }
 
 async function saveUsers() {
-    console.log('💾 Saving users:', users.length);
+    console.log('💾 Saving users to JSONBin...');
     
     try {
         const response = await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}`, {
@@ -102,7 +109,16 @@ async function saveUsers() {
         });
         
         console.log('📨 Save response status:', response.status);
-        return response.ok;
+        
+        if (response.ok) {
+            console.log('✅ Users saved successfully to cloud');
+            return true;
+        } else {
+            console.error('❌ Save failed with status:', response.status);
+            const errorText = await response.text();
+            console.error('❌ Save error details:', errorText);
+            return false;
+        }
     } catch (error) {
         console.error('💥 Save error:', error);
         return false;
@@ -129,7 +145,6 @@ async function handleLogin(e) {
         console.log('✅ Login successful');
         localStorage.setItem('currentUser', user.username);
         localStorage.setItem('currentUserId', user.id);
-        authChecked = true;
         window.location.href = './todolist.html';
     } else {
         console.log('❌ Login failed - user not found');
@@ -183,8 +198,9 @@ async function handleRegister(e) {
         document.getElementById('login-password').value = '';
     } else {
         console.log('❌ Registration failed - save error');
+        // Откатываем изменения
         users = users.filter(u => u.username !== username);
-        alert('Ошибка при регистрации. Попробуйте еще раз.');
+        alert('Ошибка при сохранении в облако. Попробуйте еще раз.');
     }
 }
 
@@ -210,8 +226,6 @@ function switchAuthTab(tab) {
 }
 
 function checkAuthStatus() {
-    if (authChecked) return; // Уже проверяли
-    
     const currentUser = localStorage.getItem('currentUser');
     const currentPage = window.location.pathname;
     
@@ -219,17 +233,8 @@ function checkAuthStatus() {
     
     if (currentUser && currentPage.includes('index.html')) {
         console.log('🔑 Redirecting to todolist...');
-        authChecked = true;
         setTimeout(() => {
             window.location.href = './todolist.html';
         }, 100);
-    } else if (!currentUser && currentPage.includes('todolist.html')) {
-        console.log('🔒 Redirecting to index...');
-        authChecked = true;
-        setTimeout(() => {
-            window.location.href = './index.html';
-        }, 100);
-    } else {
-        console.log('📍 Staying on current page');
     }
 }
