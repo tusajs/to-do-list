@@ -4,19 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Мой To-Do List</title>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="./style.css">
 </head>
 <body>
     <div id="app">
-        <!-- Красивое отображение даты и времени -->
         <div class="current-time-header">
             <div class="current-time-container">
-                <div class="current-date" id="current-date">
-                    <!-- Дата будет здесь -->
-                </div>
-                <div class="current-time" id="current-time">
-                    <!-- Время будет здесь -->
-                </div>
+                <div class="current-date" id="current-date"></div>
+                <div class="current-time" id="current-time"></div>
             </div>
         </div>
 
@@ -35,6 +30,13 @@
                     <div class="form-group">
                         <label for="task-title">Задача</label>
                         <input type="text" id="task-title" placeholder="Что нужно сделать?" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="task-category">Категория</label>
+                        <select id="task-category" required>
+                            <option value="work">💼 Рабочая</option>
+                            <option value="home">🏠 Бытовые</option>
+                        </select>
                     </div>
                     <div class="form-group">
                         <label for="task-deadline-type">Срок выполнения</label>
@@ -66,15 +68,14 @@
                 </div>
                 <div class="tasks-filter">
                     <button class="filter-btn active" data-filter="all">Все</button>
+                    <button class="filter-btn" data-filter="work">💼 Рабочие</button>
+                    <button class="filter-btn" data-filter="home">🏠 Бытовые</button>
                     <button class="filter-btn" data-filter="active">Активные</button>
                     <button class="filter-btn" data-filter="completed">Выполненные</button>
                 </div>
-                <div id="tasks-list" class="tasks-list">
-                    <!-- Задачи будут добавляться сюда динамически -->
-                </div>
+                <div id="tasks-list" class="tasks-list"></div>
             </div>
 
-            <!-- Блок статистики -->
             <div class="stats-container">
                 <div class="stats-header">
                     <h2>Статистика</h2>
@@ -102,8 +103,8 @@
                             <div class="stat-value" id="completion-rate">0%</div>
                         </div>
                         <div class="stat-card">
-                            <h3>Среднее опережение</h3>
-                            <div class="stat-value" id="avg-early">0ч</div>
+                            <h3>Рабочие / Бытовые</h3>
+                            <div class="stat-value" id="work-home-ratio">0/0</div>
                         </div>
                     </div>
                     
@@ -114,6 +115,14 @@
                     <div class="stats-details">
                         <h4>Детальная статистика</h4>
                         <div class="stats-grid">
+                            <div class="stat-detail">
+                                <span>💼 Рабочих задач:</span>
+                                <span id="work-tasks">0</span>
+                            </div>
+                            <div class="stat-detail">
+                                <span>🏠 Бытовых задач:</span>
+                                <span id="home-tasks">0</span>
+                            </div>
                             <div class="stat-detail">
                                 <span>Завершено вовремя:</span>
                                 <span id="on-time">0</span>
@@ -137,7 +146,6 @@
         </main>
     </div>
 
-    <!-- Модальное окно для подтверждения удаления -->
     <div id="confirm-modal" class="modal hidden">
         <div class="modal-content">
             <h2 id="confirm-title">Подтверждение</h2>
@@ -149,7 +157,6 @@
         </div>
     </div>
 
-    <!-- Модальное окно для редактирования задачи -->
     <div id="edit-modal" class="modal hidden">
         <div class="modal-content">
             <h2>Редактировать задачу</h2>
@@ -158,6 +165,13 @@
                 <div class="form-group">
                     <label for="edit-task-title">Задача</label>
                     <input type="text" id="edit-task-title" required>
+                </div>
+                <div class="form-group">
+                    <label for="edit-task-category">Категория</label>
+                    <select id="edit-task-category" required>
+                        <option value="work">💼 Рабочая</option>
+                        <option value="home">🏠 Бытовые</option>
+                    </select>
                 </div>
                 <div class="form-group">
                     <label for="edit-task-deadline-type">Срок выполнения</label>
@@ -182,6 +196,6 @@
         </div>
     </div>
 
-    <script src="todolist.js"></script>
+    <script src="./todolist.js"></script>
 </body>
 </html>

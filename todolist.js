@@ -1,9 +1,7 @@
-// JSONBin.io конфигурация
-const JSONBIN_API_KEY = '$2a$10$rB6rOL9mv7G7jR9mYQStnOqoKIVzmQukSnEkpKQXfrdrV9g1UYNie';
-
+// Простая локальная база для задач
+const TASKS_KEY = 'todoAppTasks';
 let currentUser = null;
 let currentUserId = null;
-let userTasksBinId = null;
 let tasks = [];
 let currentFilter = 'all';
 let updateInterval = null;
@@ -13,6 +11,7 @@ let selectedTasks = new Set();
 const currentUserSpan = document.getElementById('current-user');
 const logoutBtn = document.getElementById('logout-btn');
 const addTaskForm = document.getElementById('add-task-form');
+const taskCategory = document.getElementById('task-category');
 const taskDeadlineType = document.getElementById('task-deadline-type');
 const daysInputContainer = document.getElementById('days-input-container');
 const dateInputContainer = document.getElementById('date-input-container');
@@ -70,20 +69,7 @@ function getTodayDate() {
 // Инициализация приложения
 document.addEventListener('DOMContentLoaded', initApp);
 
-async function initApp() {
-    currentUser = localStorage.getItem('currentUser');
-    currentUserId = localStorage.getItem('currentUserId');
-    
-    if (!currentUser || !currentUserId) {
-        window.location.href = './index.html';
-        return;
-    }
-
-    // ... остальной код
-}
-
-// На это:
-async function initApp() {
+function initApp() {
     currentUser = localStorage.getItem('currentUser');
     currentUserId = localStorage.getItem('currentUserId');
     
@@ -91,105 +77,30 @@ async function initApp() {
     
     if (!currentUser || !currentUserId) {
         console.log('❌ No auth, redirecting to index...');
-        setTimeout(() => {
-            window.location.href = './index.html';
-        }, 100);
+        window.location.href = './index.html';
         return;
     }
 
     console.log('✅ Auth OK, loading app...');
     currentUserSpan.textContent = currentUser;
     
-    // ... остальной код без изменений
+    // Запускаем часы
     startClock();
+    
+    // Настройка обработчиков событий
     setupEventListeners();
+    
+    // Инициализируем дату по умолчанию
     document.getElementById('task-date').value = getTodayDate();
-    await setupUserTasksBin();
-    await loadTasks();
+    
+    // Загрузка задач
+    loadTasks();
+    
+    // Запуск таймера
     startTimer();
+    
+    // Инициализация статистики
     initStats();
-}
-
-async function setupUserTasksBin() {
-    // Получаем информацию о пользователе чтобы найти его tasksBinId
-    const usersResponse = await fetch(`https://api.jsonbin.io/v3/b/675a5b59e41b4d34e4412345/latest`, {
-        headers: {
-            'X-Master-Key': JSONBIN_API_KEY
-        }
-    });
-    
-    if (usersResponse.ok) {
-        const data = await usersResponse.json();
-        const users = data.record?.users || [];
-        const currentUserData = users.find(u => u.id === currentUserId);
-        
-        if (currentUserData && currentUserData.tasksBinId) {
-            userTasksBinId = currentUserData.tasksBinId;
-        } else {
-            // Создаем новую базу задач для пользователя
-            userTasksBinId = await createUserTasksBin();
-            
-            // Обновляем пользователя с новым tasksBinId
-            await updateUserWithTasksBinId(userTasksBinId);
-        }
-    }
-}
-
-async function createUserTasksBin() {
-    const initialTasksData = {
-        tasks: [],
-        userId: currentUserId,
-        username: currentUser,
-        created: new Date().toISOString()
-    };
-    
-    try {
-        const response = await fetch('https://api.jsonbin.io/v3/b', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-Master-Key': JSONBIN_API_KEY,
-                'X-Bin-Name': `Tasks - ${currentUser}`
-            },
-            body: JSON.stringify(initialTasksData)
-        });
-        
-        const data = await response.json();
-        return data.metadata.id;
-    } catch (error) {
-        console.error('Ошибка создания базы задач:', error);
-        throw error;
-    }
-}
-
-async function updateUserWithTasksBinId(tasksBinId) {
-    const usersResponse = await fetch(`https://api.jsonbin.io/v3/b/675a5b59e41b4d34e4412345/latest`, {
-        headers: {
-            'X-Master-Key': JSONBIN_API_KEY
-        }
-    });
-    
-    if (usersResponse.ok) {
-        const data = await usersResponse.json();
-        const users = data.record.users || [];
-        
-        const userIndex = users.findIndex(u => u.id === currentUserId);
-        if (userIndex !== -1) {
-            users[userIndex].tasksBinId = tasksBinId;
-            
-            await fetch(`https://api.jsonbin.io/v3/b/675a5b59e41b4d34e4412345`, {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-Master-Key': JSONBIN_API_KEY
-                },
-                body: JSON.stringify({
-                    users: users,
-                    metadata: data.record.metadata
-                })
-            });
-        }
-    }
 }
 
 function setupEventListeners() {
@@ -256,10 +167,11 @@ function getEndOfDay(date) {
     return endOfDay;
 }
 
-async function addTask(e) {
+function addTask(e) {
     e.preventDefault();
     
     const title = document.getElementById('task-title').value.trim();
+    const category = document.getElementById('task-category').value;
     const deadlineType = taskDeadlineType.value;
     
     if (!title) {
@@ -281,6 +193,7 @@ async function addTask(e) {
     const task = {
         id: Date.now().toString(),
         title: title,
+        category: category,
         deadline: deadline.getTime(),
         completed: false,
         createdAt: Date.now(),
@@ -288,39 +201,28 @@ async function addTask(e) {
         userId: currentUserId
     };
     
-    try {
-        tasks.push(task);
-        await saveTasks();
-        
-        // Сбрасываем форму
-        addTaskForm.reset();
-        document.getElementById('task-title').value = '';
-        document.getElementById('task-days').value = 1;
-        document.getElementById('task-date').value = getTodayDate();
-        
-    } catch (error) {
-        console.error('Ошибка добавления задачи:', error);
-        alert('Ошибка при добавлении задачи');
-        tasks.pop(); // Откатываем изменения
-    }
+    tasks.push(task);
+    saveTasks();
+    
+    // Сбрасываем форму
+    addTaskForm.reset();
+    document.getElementById('task-title').value = '';
+    document.getElementById('task-category').value = 'work';
+    document.getElementById('task-days').value = 1;
+    document.getElementById('task-date').value = getTodayDate();
+    toggleDeadlineInput();
 }
 
-async function deleteTask(id) {
+function deleteTask(id) {
     if (confirm('Вы уверены, что хотите удалить эту задачу?')) {
-        try {
-            tasks = tasks.filter(task => task.id !== id);
-            await saveTasks();
-        } catch (error) {
-            console.error('Ошибка удаления:', error);
-            alert('Ошибка при удалении задачи');
-        }
+        tasks = tasks.filter(task => task.id !== id);
+        saveTasks();
     }
 }
 
-async function toggleTaskCompletion(id) {
-    const taskIndex = tasks.findIndex(task => task.id === id);
-    if (taskIndex !== -1) {
-        const task = tasks[taskIndex];
+function toggleTaskCompletion(id) {
+    const task = tasks.find(task => task.id === id);
+    if (task) {
         task.completed = !task.completed;
         
         if (task.completed && !task.completedAt) {
@@ -329,18 +231,8 @@ async function toggleTaskCompletion(id) {
             task.completedAt = null;
         }
         
-        try {
-            await saveTasks();
-            updateStats(document.querySelector('.stats-tab.active').dataset.period);
-        } catch (error) {
-            console.error('Ошибка обновления:', error);
-            alert('Ошибка при обновлении задачи');
-            // Откатываем изменения
-            task.completed = !task.completed;
-            if (task.completedAt) {
-                task.completedAt = task.completed ? Date.now() : null;
-            }
-        }
+        saveTasks();
+        updateStats(document.querySelector('.stats-tab.active').dataset.period);
     }
 }
 
@@ -349,6 +241,7 @@ function editTask(id) {
     if (task) {
         document.getElementById('edit-task-id').value = task.id;
         document.getElementById('edit-task-title').value = task.title;
+        document.getElementById('edit-task-category').value = task.category;
         
         const deadline = new Date(task.deadline);
         document.getElementById('edit-task-deadline-type').value = 'date';
@@ -365,11 +258,12 @@ function editTask(id) {
     }
 }
 
-async function saveEditedTask(e) {
+function saveEditedTask(e) {
     e.preventDefault();
     
     const id = document.getElementById('edit-task-id').value;
     const title = document.getElementById('edit-task-title').value.trim();
+    const category = document.getElementById('edit-task-category').value;
     const deadlineType = document.getElementById('edit-task-deadline-type').value;
     
     if (!title) {
@@ -388,19 +282,15 @@ async function saveEditedTask(e) {
         deadline = new Date(dateValue + 'T23:59:59.999');
     }
     
-    const taskIndex = tasks.findIndex(task => task.id === id);
-    if (taskIndex !== -1) {
-        tasks[taskIndex].title = title;
-        tasks[taskIndex].deadline = deadline.getTime();
-        tasks[taskIndex].totalTime = deadline.getTime() - tasks[taskIndex].createdAt;
+    const task = tasks.find(task => task.id === id);
+    if (task) {
+        task.title = title;
+        task.category = category;
+        task.deadline = deadline.getTime();
+        task.totalTime = deadline.getTime() - task.createdAt;
         
-        try {
-            await saveTasks();
-            editModal.classList.add('hidden');
-        } catch (error) {
-            console.error('Ошибка сохранения:', error);
-            alert('Ошибка при сохранении задачи');
-        }
+        saveTasks();
+        editModal.classList.add('hidden');
     }
 }
 
@@ -420,7 +310,7 @@ function handleSelectAll() {
     renderTasks();
 }
 
-async function handleDeleteAll() {
+function handleDeleteAll() {
     if (tasks.length === 0) {
         alert('Нет задач для удаления');
         return;
@@ -430,10 +320,10 @@ async function handleDeleteAll() {
         showConfirmModal(
             'Удалить выделенные задачи',
             `Вы уверены, что хотите удалить ${selectedTasks.size} выделенных задач?`,
-            async () => {
+            () => {
                 tasks = tasks.filter(task => !selectedTasks.has(task.id));
                 selectedTasks.clear();
-                await saveTasks();
+                saveTasks();
                 selectAllBtn.textContent = 'Выделить все';
             }
         );
@@ -441,24 +331,24 @@ async function handleDeleteAll() {
         showConfirmModal(
             'Удалить все задачи',
             'Вы уверены, что хотите удалить ВСЕ задачи?',
-            async () => {
+            () => {
                 tasks = [];
                 selectedTasks.clear();
-                await saveTasks();
+                saveTasks();
                 selectAllBtn.textContent = 'Выделить все';
             }
         );
     }
 }
 
-async function handleResetStats() {
+function handleResetStats() {
     showConfirmModal(
         'Сбросить статистику',
         'Вы уверены, что хотите удалить ВСЕ ваши задачи?',
-        async () => {
+        () => {
             tasks = [];
             selectedTasks.clear();
-            await saveTasks();
+            saveTasks();
             selectAllBtn.textContent = 'Выделить все';
             updateStats(document.querySelector('.stats-tab.active').dataset.period);
             alert('Все задачи удалены!');
@@ -494,62 +384,46 @@ function setFilter(filter) {
     renderTasks();
 }
 
-// Загрузка задач из JSONBin
-async function loadTasks() {
-    if (!userTasksBinId) return;
-    
+// Загрузка и сохранение задач
+function loadTasks() {
     try {
-        const response = await fetch(`https://api.jsonbin.io/v3/b/${userTasksBinId}/latest`, {
-            headers: {
-                'X-Master-Key': JSONBIN_API_KEY
-            }
-        });
-        
-        if (response.ok) {
-            const data = await response.json();
-            tasks = data.record?.tasks || [];
-            renderTasks();
-        }
+        const allTasks = JSON.parse(localStorage.getItem(TASKS_KEY) || '[]');
+        tasks = allTasks.filter(task => task.userId === currentUserId);
+        console.log('✅ Tasks loaded:', tasks.length);
+        renderTasks();
     } catch (error) {
-        console.error('Ошибка загрузки задач:', error);
+        console.error('Error loading tasks:', error);
+        tasks = [];
     }
 }
 
-// Сохранение задач в JSONBin
-async function saveTasks() {
-    if (!userTasksBinId) return;
-    
+function saveTasks() {
     try {
-        const response = await fetch(`https://api.jsonbin.io/v3/b/${userTasksBinId}`, {
-            method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-Master-Key': JSONBIN_API_KEY
-            },
-            body: JSON.stringify({
-                tasks: tasks,
-                userId: currentUserId,
-                username: currentUser,
-                updated: new Date().toISOString(),
-                totalTasks: tasks.length
-            })
-        });
+        // Загружаем все задачи
+        const allTasks = JSON.parse(localStorage.getItem(TASKS_KEY) || '[]');
         
-        if (response.ok) {
-            renderTasks();
-        } else {
-            throw new Error('Ошибка сохранения');
-        }
+        // Удаляем старые задачи текущего пользователя
+        const otherTasks = allTasks.filter(task => task.userId !== currentUserId);
+        
+        // Добавляем текущие задачи
+        const updatedTasks = [...otherTasks, ...tasks];
+        
+        localStorage.setItem(TASKS_KEY, JSON.stringify(updatedTasks));
+        console.log('✅ Tasks saved');
+        renderTasks();
     } catch (error) {
-        console.error('Ошибка сохранения задач:', error);
-        throw error;
+        console.error('Error saving tasks:', error);
     }
 }
 
 function renderTasks() {
     let filteredTasks = tasks;
     
-    if (currentFilter === 'active') {
+    if (currentFilter === 'work') {
+        filteredTasks = tasks.filter(task => task.category === 'work');
+    } else if (currentFilter === 'home') {
+        filteredTasks = tasks.filter(task => task.category === 'home');
+    } else if (currentFilter === 'active') {
         filteredTasks = tasks.filter(task => !task.completed);
     } else if (currentFilter === 'completed') {
         filteredTasks = tasks.filter(task => task.completed);
@@ -651,7 +525,7 @@ function getProgressInfo(task, remainingTime) {
 
 function createTaskElement(task) {
     const taskElement = document.createElement('div');
-    taskElement.className = `task-item ${task.completed ? 'completed' : ''} ${selectedTasks.has(task.id) ? 'selected' : ''}`;
+    taskElement.className = `task-item ${task.category} ${task.completed ? 'completed' : ''} ${selectedTasks.has(task.id) ? 'selected' : ''}`;
     taskElement.dataset.taskId = task.id;
     
     const remainingTime = getRemainingTime(task.deadline);
@@ -664,10 +538,15 @@ function createTaskElement(task) {
     });
     
     const isSelected = selectedTasks.has(task.id);
+    const categoryIcon = task.category === 'work' ? '💼' : '🏠';
+    const categoryText = task.category === 'work' ? 'Рабочая' : 'Бытовые';
     
     taskElement.innerHTML = `
         <div class="task-header">
-            <span class="task-title">${task.title}</span>
+            <div style="display: flex; align-items: center; flex: 1;">
+                <span class="task-title">${task.title}</span>
+                <span class="task-category ${task.category}">${categoryIcon} ${categoryText}</span>
+            </div>
             <div class="task-actions">
                 <button class="task-action-btn select-btn" title="${isSelected ? 'Снять выделение' : 'Выделить'}">
                     ${isSelected ? '✅' : '⭕'}
@@ -775,6 +654,8 @@ function calculateStats(period = 'week') {
     
     const completedTasks = periodTasks.filter(task => task.completed);
     const activeTasks = periodTasks.filter(task => !task.completed);
+    const workTasks = periodTasks.filter(task => task.category === 'work');
+    const homeTasks = periodTasks.filter(task => task.category === 'home');
     
     let totalEarlyTime = 0;
     let earlyCompletions = 0;
@@ -804,6 +685,8 @@ function calculateStats(period = 'week') {
         totalTasks,
         completedTasks: completedTasks.length,
         activeTasks: activeTasks.length,
+        workTasks: workTasks.length,
+        homeTasks: homeTasks.length,
         completionRate,
         avgEarlyHours,
         earlyCompletions,
@@ -818,8 +701,10 @@ function updateStats(period = 'week') {
     document.getElementById('total-tasks').textContent = stats.totalTasks;
     document.getElementById('completed-tasks').textContent = stats.completedTasks;
     document.getElementById('completion-rate').textContent = `${stats.completionRate}%`;
-    document.getElementById('avg-early').textContent = `${stats.avgEarlyHours}ч`;
+    document.getElementById('work-home-ratio').textContent = `${stats.workTasks}/${stats.homeTasks}`;
     
+    document.getElementById('work-tasks').textContent = stats.workTasks;
+    document.getElementById('home-tasks').textContent = stats.homeTasks;
     document.getElementById('on-time').textContent = stats.onTimeCompletions;
     document.getElementById('early').textContent = stats.earlyCompletions;
     document.getElementById('overdue').textContent = stats.overdueCompletions;
@@ -842,6 +727,13 @@ function updatePerformanceMessage(stats) {
         message = 'Неплохо, но есть куда стремиться. Попробуйте лучше планировать время.';
     } else {
         message = 'Вам стоит пересмотреть подход к планированию задач.';
+    }
+    
+    // Добавляем информацию о балансе
+    if (stats.workTasks > 0 && stats.homeTasks > 0) {
+        const workPercentage = Math.round((stats.workTasks / stats.totalTasks) * 100);
+        const homePercentage = Math.round((stats.homeTasks / stats.totalTasks) * 100);
+        message += ` Баланс: ${workPercentage}% рабочих / ${homePercentage}% бытовых задач.`;
     }
     
     if (stats.avgEarlyHours > 0) {

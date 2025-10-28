@@ -1,7 +1,5 @@
-// JSONBin.io конфигурация
-const JSONBIN_API_KEY = '$2a$10$rB6rOL9mv7G7jR9mYQStnOqoKIVzmQukSnEkpKQXfrdrV9g1UYNie';
-const JSONBIN_BIN_ID = '675a5b59e41b4d34e4412345';
-
+// Простая локальная база данных
+const DB_KEY = 'todoAppDatabase';
 let users = [];
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -21,106 +19,33 @@ document.addEventListener('DOMContentLoaded', function() {
     loginForm.addEventListener('submit', handleLogin);
     registerForm.addEventListener('submit', handleRegister);
     
-    // Тестируем подключение к JSONBin
-    testJSONBinConnection();
+    // Загружаем пользователей из localStorage
+    loadUsers();
     checkAuthStatus();
 });
 
-async function testJSONBinConnection() {
-    console.log('🧪 Testing JSONBin connection...');
-    
+function loadUsers() {
     try {
-        const response = await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}/latest`, {
-            method: 'GET',
-            headers: {
-                'X-Master-Key': JSONBIN_API_KEY,
-                'Content-Type': 'application/json'
-            }
-        });
-        
-        console.log('📡 Response status:', response.status);
-        console.log('📡 Response headers:', response.headers);
-        
-        if (response.ok) {
-            const data = await response.json();
-            console.log('✅ JSONBin connection successful');
-            console.log('📊 Existing data:', data);
-            users = data.record?.users || [];
-        } else {
-            console.log('❌ JSONBin response not OK, status:', response.status);
-            const errorText = await response.text();
-            console.log('❌ Error details:', errorText);
-            
-            // Пробуем создать базу
-            await createInitialDatabase();
-        }
+        const db = JSON.parse(localStorage.getItem(DB_KEY) || '{}');
+        users = db.users || [];
+        console.log('✅ Users loaded from localStorage:', users.length);
     } catch (error) {
-        console.error('💥 JSONBin connection failed:', error);
-        alert('Ошибка подключения к облачной базе. Проверь интернет соединение.');
+        console.error('Error loading users:', error);
+        users = [];
     }
 }
 
-async function createInitialDatabase() {
-    console.log('🆕 Creating initial database...');
-    const initialData = { 
-        users: [],
-        created: new Date().toISOString()
-    };
-    
+function saveUsers() {
     try {
-        const response = await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}`, {
-            method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-Master-Key': JSONBIN_API_KEY
-            },
-            body: JSON.stringify(initialData)
-        });
-        
-        console.log('🔄 Create response status:', response.status);
-        
-        if (response.ok) {
-            users = [];
-            console.log('✅ Database created successfully');
-        } else {
-            console.error('❌ Failed to create database, status:', response.status);
-            const errorText = await response.text();
-            console.error('❌ Error details:', errorText);
-        }
+        const db = {
+            users: users,
+            updated: new Date().toISOString()
+        };
+        localStorage.setItem(DB_KEY, JSON.stringify(db));
+        console.log('✅ Users saved to localStorage');
+        return true;
     } catch (error) {
-        console.error('💥 Error creating database:', error);
-    }
-}
-
-async function saveUsers() {
-    console.log('💾 Saving users to JSONBin...');
-    
-    try {
-        const response = await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}`, {
-            method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-Master-Key': JSONBIN_API_KEY
-            },
-            body: JSON.stringify({ 
-                users: users,
-                updated: new Date().toISOString()
-            })
-        });
-        
-        console.log('📨 Save response status:', response.status);
-        
-        if (response.ok) {
-            console.log('✅ Users saved successfully to cloud');
-            return true;
-        } else {
-            console.error('❌ Save failed with status:', response.status);
-            const errorText = await response.text();
-            console.error('❌ Save error details:', errorText);
-            return false;
-        }
-    } catch (error) {
-        console.error('💥 Save error:', error);
+        console.error('Error saving users:', error);
         return false;
     }
 }
@@ -186,9 +111,7 @@ async function handleRegister(e) {
     console.log('🆕 New user:', newUser);
     
     users.push(newUser);
-    console.log('📋 Users array now:', users.length);
-
-    const saved = await saveUsers();
+    const saved = saveUsers();
 
     if (saved) {
         console.log('✅ Registration successful');
@@ -197,10 +120,8 @@ async function handleRegister(e) {
         document.getElementById('login-username').value = username;
         document.getElementById('login-password').value = '';
     } else {
-        console.log('❌ Registration failed - save error');
-        // Откатываем изменения
-        users = users.filter(u => u.username !== username);
-        alert('Ошибка при сохранении в облако. Попробуйте еще раз.');
+        console.log('❌ Registration failed');
+        alert('Ошибка при регистрации');
     }
 }
 

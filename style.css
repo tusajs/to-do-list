@@ -4,6 +4,8 @@
     --success: #5cb85c;
     --warning: #f0ad4e;
     --danger: #d9534f;
+    --work: #4a6fa5;
+    --home: #5cb85c;
     --light: #f8f9fa;
     --dark: #343a40;
     --gray: #6c757d;
@@ -318,10 +320,12 @@ body {
     padding: 8px 12px;
 }
 
+/* Стили для фильтров задач */
 .tasks-filter {
     display: flex;
     margin-bottom: 20px;
     border-bottom: 1px solid #ddd;
+    flex-wrap: wrap;
 }
 
 .filter-btn {
@@ -332,6 +336,7 @@ body {
     cursor: pointer;
     border-bottom: 2px solid transparent;
     transition: all 0.3s;
+    min-width: 120px;
 }
 
 .filter-btn.active {
@@ -363,9 +368,16 @@ body {
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
 }
 
+.task-item.work {
+    border-left-color: var(--work);
+}
+
+.task-item.home {
+    border-left-color: var(--home);
+}
+
 .task-item.completed {
     opacity: 0.7;
-    border-left-color: var(--success);
 }
 
 .task-item.completed .task-title {
@@ -385,6 +397,23 @@ body {
     flex: 1;
     word-break: break-word;
     font-size: 16px;
+}
+
+.task-category {
+    font-size: 12px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: var(--primary);
+    color: white;
+    margin-left: 10px;
+}
+
+.task-category.work {
+    background: var(--work);
+}
+
+.task-category.home {
+    background: var(--home);
 }
 
 .task-actions {
@@ -662,6 +691,14 @@ body {
     .tasks-controls {
         width: 100%;
         justify-content: space-between;
+    }
+    
+    .tasks-filter {
+        flex-direction: column;
+    }
+    
+    .filter-btn {
+        min-width: auto;
     }
     
     .task-header {
